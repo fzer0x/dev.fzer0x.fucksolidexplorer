@@ -1,6 +1,7 @@
 package dev.fzer0x.fucksolidexplorer
 
 import android.content.ContentResolver
+import android.os.Build
 import android.provider.Settings
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
@@ -12,8 +13,13 @@ import java.net.UnknownHostException
 import java.util.UUID
 
 class XposedInit : IXposedHookLoadPackage {
+
+    companion object {
+        private const val TAG = "FuckSolidExplorer"
+        private const val TARGET_PACKAGE = "pl.solidexplorer2"
+    }
+
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
-        
         if (lpparam.packageName == "dev.fzer0x.fucksolidexplorer") {
             try {
                 XposedHelpers.findAndHookMethod(
@@ -26,103 +32,76 @@ class XposedInit : IXposedHookLoadPackage {
             return
         }
 
-        if (lpparam.packageName == "pl.solidexplorer2") {
-            val sessionUuid = UUID.randomUUID().toString()
-            val fakeAndroidId = sessionUuid.replace("-", "").substring(0, 16)
-            
-            XposedBridge.log("FuckSolidExplorer: Patching pl.solidexplorer2 [Session: $fakeAndroidId]")
+        if (lpparam.packageName != TARGET_PACKAGE) return
 
+        val sessionUuid = UUID.randomUUID().toString()
+        val fakeAndroidId = sessionUuid.replace("-", "").substring(0, 16)
+        
+        XposedBridge.log("$TAG: Patching pl.solidexplorer2 for Android 10 (SDK 29)")
+
+        try {
             val licenseClass = "pl.solidexplorer.licensing.SELicenseManager"
-            try {
-                val clazz = XposedHelpers.findClassIfExists(licenseClass, lpparam.classLoader)
-                clazz?.declaredMethods?.forEach { method ->
-                    val name = method.name.lowercase()
-                    if (method.returnType == Boolean::class.java || method.returnType == java.lang.Boolean.TYPE) {
-                        if (name.contains("license") || name.contains("premium") || name.contains("unlocked") || name.contains("fullversion") || name.contains("valid")) {
-                            XposedBridge.hookMethod(method, XC_MethodReplacement.returnConstant(true))
-                        } else if (name.contains("trial") || name.contains("expired") || name.contains("ads")) {
-                            XposedBridge.hookMethod(method, XC_MethodReplacement.returnConstant(false))
-                        }
-                    }
-                    if (method.returnType == String::class.java && (name.contains("license") || name.contains("status"))) {
-                        XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                            override fun afterHookedMethod(param: MethodHookParam) {
-                                param.result = "UNLOCKED BY fzer0x"
-                            }
-                        })
+            val clazz = XposedHelpers.findClassIfExists(licenseClass, lpparam.classLoader)
+            clazz?.declaredMethods?.forEach { method ->
+                val name = method.name.lowercase()
+                if (method.returnType == Boolean::class.java || method.returnType == java.lang.Boolean.TYPE) {
+                    if (name.contains("license") || name.contains("premium") || name.contains("unlocked") || 
+                        name.contains("fullversion") || name.contains("valid")) {
+                        XposedBridge.hookMethod(method, XC_MethodReplacement.returnConstant(true))
+                    } else if (name.contains("trial") || name.contains("expired") || name.contains("ads")) {
+                        XposedBridge.hookMethod(method, XC_MethodReplacement.returnConstant(false))
                     }
                 }
-            } catch (e: Throwable) {}
-
-            try {
-                val utilsClazz = XposedHelpers.findClassIfExists("pl.solidexplorer.util.Utils", lpparam.classLoader)
-                if (utilsClazz != null) {
-                    XposedBridge.hookAllMethods(utilsClazz, "getUniqueId", object : XC_MethodReplacement() {
-                        override fun replaceHookedMethod(param: MethodHookParam): Any {
-                            return sessionUuid
+                if (method.returnType == String::class.java && (name.contains("license") || name.contains("status"))) {
+                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            param.result = "PREMIUM UNLOCKED BY fzer0x"
                         }
                     })
                 }
-            } catch (ignored: Throwable) {}
-
-            try {
-                XposedHelpers.findAndHookMethod(
-                    Settings.Secure::class.java,
-                    "getString",
-                    ContentResolver::class.java,
-                    String::class.java,
-                    object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
-                            if (param.args[1] == Settings.Secure.ANDROID_ID) {
-                                param.result = fakeAndroidId
-                            }
-                        }
-                    }
-                )
-            } catch (ignored: Throwable) {}
-
-            try {
-                XposedHelpers.setStaticObjectField(android.os.Build::class.java, "SERIAL", fakeAndroidId)
-                XposedHelpers.setStaticObjectField(android.os.Build::class.java, "ID", fakeAndroidId)
-            } catch (ignored: Throwable) {}
-
-            // Network/Ad Blocking
-            try {
-                XposedHelpers.findAndHookMethod(
-                    "java.net.InetAddress",
-                    lpparam.classLoader,
-                    "getAllByName",
-                    String::class.java,
-                    object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
-                            val host = param.args[0] as? String
-                            if (host != null) {
-                                val blocked = listOf(
-                                    "adservice.google.com",
-                                    "googleads",
-                                    "doubleclick",
-                                    "firebaselogging.googleapis.com",
-                                    "app-measurement.com",
-                                    "crashlytics.com"
-                                )
-                                if (blocked.any { host.contains(it) }) {
-                                    param.throwable = UnknownHostException("Blocked by FuckSolidExplorer")
-                                }
-                            }
-                        }
-                    }
-                )
-            } catch (ignored: Throwable) {}
-
-            listOf("com.google.firebase.analytics.FirebaseAnalytics", "com.google.firebase.crashlytics.FirebaseCrashlytics").forEach { name ->
-                try {
-                    XposedHelpers.findClassIfExists(name, lpparam.classLoader)?.declaredMethods?.forEach { m ->
-                        if (m.returnType.name == "void" && (m.name.startsWith("log") || m.name.startsWith("record"))) {
-                            XposedBridge.hookMethod(m, XC_MethodReplacement.DO_NOTHING)
-                        }
-                    }
-                } catch (ignored: Throwable) {}
             }
+        } catch (e: Throwable) {
+            XposedBridge.log("$TAG: Licensing hook failed: ${e.message}")
         }
+
+        try {
+            XposedHelpers.findAndHookMethod(
+                Settings.Secure::class.java,
+                "getString",
+                ContentResolver::class.java,
+                String::class.java,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (param.args[1] == Settings.Secure.ANDROID_ID) {
+                            param.result = fakeAndroidId
+                        }
+                    }
+                }
+            )
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                XposedHelpers.findAndHookMethod(Build::class.java, "getSerial", XC_MethodReplacement.returnConstant(fakeAndroidId))
+            }
+            
+            XposedHelpers.setStaticObjectField(Build::class.java, "SERIAL", fakeAndroidId)
+        } catch (ignored: Throwable) {}
+
+        try {
+            XposedHelpers.findAndHookMethod(
+                "java.net.InetAddress",
+                lpparam.classLoader,
+                "getAllByName",
+                String::class.java,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val host = param.args[0] as? String ?: return
+                        val blocked = listOf("adservice", "googleads", "doubleclick", "firebase", "crashlytics")
+                        if (blocked.any { host.contains(it) }) {
+                            param.throwable = UnknownHostException("Blocked by FuckSolidExplorer")
+                        }
+                    }
+                }
+            )
+        } catch (ignored: Throwable) {}
     }
 }

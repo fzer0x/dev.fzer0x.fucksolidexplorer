@@ -11,9 +11,9 @@ android {
     defaultConfig {
         applicationId = "dev.fzer0x.fucksolidexplorer"
         minSdk = 29
-        targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 29
+        versionCode = 5
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
