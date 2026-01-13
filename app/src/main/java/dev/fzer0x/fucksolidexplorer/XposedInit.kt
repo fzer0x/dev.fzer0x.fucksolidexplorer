@@ -96,8 +96,18 @@ class XposedInit : IXposedHookLoadPackage {
                     object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
                             val host = param.args[0] as? String
-                            if (host != null && (host.contains("adservice.google.com") || host.contains("googleads") || host.contains("doubleclick"))) {
-                                param.throwable = UnknownHostException("Blocked by FuckSolidExplorer")
+                            if (host != null) {
+                                val blocked = listOf(
+                                    "adservice.google.com",
+                                    "googleads",
+                                    "doubleclick",
+                                    "firebaselogging.googleapis.com",
+                                    "app-measurement.com",
+                                    "crashlytics.com"
+                                )
+                                if (blocked.any { host.contains(it) }) {
+                                    param.throwable = UnknownHostException("Blocked by FuckSolidExplorer")
+                                }
                             }
                         }
                     }
