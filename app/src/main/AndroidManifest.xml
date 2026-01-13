@@ -21,10 +21,13 @@
             android:value="Premium features and ad-block for Solid Explorer" />
         <meta-data
             android:name="xposedminversion"
-            android:value="82" />
+            android:value="93" />
         <meta-data
             android:name="xposedscope"
             android:resource="@array/xposed_scope" />
+        <meta-data
+            android:name="xposedmoduleentry"
+            android:value="dev.fzer0x.fucksolidexplorer.XposedInit" />
 
         <activity
             android:name=".MainActivity"
