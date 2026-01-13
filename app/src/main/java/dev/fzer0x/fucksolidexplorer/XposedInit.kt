@@ -8,6 +8,7 @@ import de.robv.android.xposed.XC_MethodReplacement
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import java.net.UnknownHostException
 import java.util.UUID
 
 class XposedInit : IXposedHookLoadPackage {
@@ -83,6 +84,24 @@ class XposedInit : IXposedHookLoadPackage {
             try {
                 XposedHelpers.setStaticObjectField(android.os.Build::class.java, "SERIAL", fakeAndroidId)
                 XposedHelpers.setStaticObjectField(android.os.Build::class.java, "ID", fakeAndroidId)
+            } catch (ignored: Throwable) {}
+
+            // Network/Ad Blocking
+            try {
+                XposedHelpers.findAndHookMethod(
+                    "java.net.InetAddress",
+                    lpparam.classLoader,
+                    "getAllByName",
+                    String::class.java,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val host = param.args[0] as? String
+                            if (host != null && (host.contains("adservice.google.com") || host.contains("googleads") || host.contains("doubleclick"))) {
+                                param.throwable = UnknownHostException("Blocked by FuckSolidExplorer")
+                            }
+                        }
+                    }
+                )
             } catch (ignored: Throwable) {}
 
             listOf("com.google.firebase.analytics.FirebaseAnalytics", "com.google.firebase.crashlytics.FirebaseCrashlytics").forEach { name ->
