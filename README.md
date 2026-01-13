@@ -18,10 +18,6 @@ A modern LSPosed module to unlock premium features and remove advertisements fro
 4. Reboot your device (or force stop Solid Explorer).
 5. Open the FuckSolidExplorer app to verify the activation status.
 
-## Usage
-
-Once activated, Solid Explorer will show a license status of **"UNLOCKED BY fzer0x"**. All premium features like cloud storage plugins and customization options will be available immediately.
-
 ## Build
 
 You can build the project using Android Studio:
