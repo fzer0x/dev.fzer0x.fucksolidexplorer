@@ -3,36 +3,41 @@ package dev.fzer0x.fucksolidexplorer
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.fzer0x.fucksolidexplorer.ui.theme.FuckSolidExplorerTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import java.net.URL
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,6 +47,11 @@ class MainActivity : ComponentActivity() {
             FuckSolidExplorerTheme {
                 val uriHandler = LocalUriHandler.current
                 val targetInfo = getTargetAppInfo("pl.solidexplorer2")
+                var downloadCount by remember { mutableStateOf<Int?>(null) }
+
+                LaunchedEffect(Unit) {
+                    downloadCount = fetchDownloadCount()
+                }
                 
                 Scaffold(
                     modifier = Modifier.fillMaxSize()
@@ -50,7 +60,8 @@ class MainActivity : ComponentActivity() {
                         ModuleStatusScreen(
                             modifier = Modifier.padding(innerPadding),
                             isActive = isModuleActive(),
-                            targetVersion = targetInfo
+                            targetVersion = targetInfo,
+                            downloadCount = downloadCount
                         )
 
                         Column(
@@ -75,13 +86,23 @@ class MainActivity : ComponentActivity() {
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "GitHub Repository",
+                                    text = "GitHub fzer0x",
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 1.sp
                                 )
                             }
                             
-                            Spacer(modifier = Modifier.height(24.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            if (downloadCount != null) {
+                                Text(
+                                    text = "$downloadCount Downloads",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
                             
                             Text(
                                 text = "Developed by fzer0x",
@@ -118,11 +139,33 @@ class MainActivity : ComponentActivity() {
             "Not Found"
         }
     }
+
+    private suspend fun fetchDownloadCount(): Int? = withContext(Dispatchers.IO) {
+        try {
+            val response = URL("https://api.github.com/repos/Xposed-Modules-Repo/dev.fzer0x.fucksolidexplorer/releases").readText()
+            val releases = JSONArray(response)
+            var totalDownloads = 0
+            for (i in 0 until releases.length()) {
+                val release = releases.getJSONObject(i)
+                val assets = release.getJSONArray("assets")
+                for (j in 0 until assets.length()) {
+                    totalDownloads += assets.getJSONObject(j).getInt("download_count")
+                }
+            }
+            totalDownloads
+        } catch (e: Exception) {
+            null
+        }
+    }
 }
 
 @Composable
-fun ModuleStatusScreen(modifier: Modifier = Modifier, isActive: Boolean, targetVersion: String) {
+fun ModuleStatusScreen(modifier: Modifier = Modifier, isActive: Boolean, targetVersion: String, downloadCount: Int?) {
     val infiniteTransition = rememberInfiniteTransition(label = "modern_3d")
+    var clickCount by remember { mutableIntStateOf(0) }
+    var showAboutDialog by remember { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
 
     val rotation by infiniteTransition.animateFloat(
         initialValue = -10f,
@@ -145,6 +188,34 @@ fun ModuleStatusScreen(modifier: Modifier = Modifier, isActive: Boolean, targetV
     )
 
     val statusColor = if (isActive) Color(0xFF00E676) else Color(0xFFFF5252)
+
+    if (showAboutDialog) {
+        AlertDialog(
+            onDismissRequest = { showAboutDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showAboutDialog = false }) {
+                    Text("OK")
+                }
+            },
+            title = { Text("Fuck Solid Explorer", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Version: 1.0", style = MaterialTheme.typography.bodyLarge)
+                    Text("Developer: fzer0x", style = MaterialTheme.typography.bodyLarge)
+                    if (downloadCount != null) {
+                        Text("Total Downloads: $downloadCount", style = MaterialTheme.typography.bodyLarge)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { uriHandler.openUri("https://github.com/fzer0x/dev.fzer0x.fucksolidexplorer") },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("Github", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        )
+    }
 
     Box(
         modifier = modifier
@@ -172,7 +243,7 @@ fun ModuleStatusScreen(modifier: Modifier = Modifier, isActive: Boolean, targetV
             modifier = Modifier
                 .padding(24.dp)
                 .fillMaxWidth(0.85f)
-                .aspectRatio(0.85f)
+                .aspectRatio(0.75f)
                 .graphicsLayer {
                     rotationY = rotation
                     rotationX = -rotation / 2f
@@ -200,7 +271,7 @@ fun ModuleStatusScreen(modifier: Modifier = Modifier, isActive: Boolean, targetV
             ) {
                 Box(
                     modifier = Modifier
-                        .size(160.dp)
+                        .size(140.dp)
                         .shadow(elevation = 20.dp, shape = CircleShape, spotColor = statusColor)
                         .background(
                             brush = Brush.radialGradient(
@@ -225,32 +296,41 @@ fun ModuleStatusScreen(modifier: Modifier = Modifier, isActive: Boolean, targetV
                     contentAlignment = Alignment.Center
                 ) {
                     Surface(
-                        modifier = Modifier.size(110.dp),
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                clickCount++
+                                if (clickCount >= 10) {
+                                    showAboutDialog = true
+                                    clickCount = 0
+                                }
+                            },
                         shape = CircleShape,
                         color = Color.White.copy(alpha = 0.05f),
                         tonalElevation = 4.dp
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Image(
-                                painter = painterResource(id = R.drawable.symbolv1),
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(75.dp)
-                                    .clip(CircleShape)
-                                    .graphicsLayer {
-                                        shadowElevation = 10f
-                                    },
-                                colorFilter = ColorFilter.tint(statusColor)
+                            Text(
+                                text = "0x",
+                                fontSize = 42.sp,
+                                fontWeight = FontWeight.Black,
+                                color = statusColor,
+                                modifier = Modifier.graphicsLayer {
+                                    shadowElevation = 10f
+                                }
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
                     text = if (isActive) "ACTIVE" else "INACTIVE",
-                    fontSize = 32.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 6.sp,
                     color = statusColor
@@ -271,11 +351,60 @@ fun ModuleStatusScreen(modifier: Modifier = Modifier, isActive: Boolean, targetV
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Modern Launch Button with Scale Effect
+                val launchInteractionSource = remember { MutableInteractionSource() }
+                val isPressed by launchInteractionSource.collectIsPressedAsState()
+                val buttonScale by animateFloatAsState(
+                    targetValue = if (isPressed) 0.92f else 1f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                    label = "button_scale"
+                )
+
+                Button(
+                    onClick = {
+                        val intent = context.packageManager.getLaunchIntentForPackage("pl.solidexplorer2")
+                        if (intent != null) {
+                            context.startActivity(intent)
+                        } else {
+                            Toast.makeText(context, "Solid Explorer not found", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    interactionSource = launchInteractionSource,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = statusColor,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .height(56.dp)
+                        .graphicsLayer {
+                            scaleX = buttonScale
+                            scaleY = buttonScale
+                        }
+                        .shadow(
+                            elevation = if (isPressed) 4.dp else 12.dp,
+                            shape = RoundedCornerShape(16.dp),
+                            spotColor = statusColor
+                        )
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        "Launch App",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
                     text = if (isActive) "Modul is running." else "Module not running.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Light,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
